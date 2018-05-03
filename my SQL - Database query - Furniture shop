@@ -1,0 +1,148 @@
+# If necessary use; DROP database DataMart;
+drop database DataMart;
+# Firstly, we create our Data Mart database. 
+Create Database DataMart;
+
+# We then connect to our own business database
+USE furnitureshop;
+
+# Next we create a table within our new Data Mart database of each SQL query we have developed  Query1)
+drop Table if exists DataMart.Query1_Data;
+Create Table DataMart.Query1_Data 
+SELECT product_order.*, furniture_stock.Product_Type, furniture_stock.Supplier_ID
+from product_order
+inner JOIN furniture_stock
+ON product_order.Stock_ID=furniture_stock.Stock_ID
+where Date >= date '2017.12.04' and Date <= date '2017.12.10';
+
+
+# Testing scripts to show me the result of Query 1
+Use Datamart;
+select * from DataMart.Query1_Data;
+
+# Now add in the code to create a trigger for Query 2
+
+
+drop table if exists stock_audit;
+
+	CREATE TABLE stock_audit ( 
+    id int(11) NOT NULL AUTO_INCREMENT, 
+    InventorySold int(11) NOT NULL,
+    Stock_ID varchar(11) NOT NULL,
+    changedat datetime DEFAULT NULL, 
+    action varchar(50) DEFAULT NULL, 
+    PRIMARY KEY (id) 
+ );
+
+drop trigger if exists stock_update_audit;
+DELIMITER //
+CREATE trigger stock_update_audit
+   AFTER INSERT ON product_order 
+   FOR EACH ROW
+BEGIN
+  INSERT INTO stock_audit
+  SET action = 'update',
+   Stock_ID = new.Stock_ID,
+   InventorySold = InventorySold - NEW.Qnt_Sold,
+   changedat = NOW();
+END//
+
+
+delimiter ;
+drop trigger if exists inven_lev;
+
+CREATE TRIGGER inven_lev
+AFTER INSERT ON product_order 
+FOR EACH ROW
+  UPDATE furniture_stock
+     SET Inventory_lvl = Inventory_lvl - NEW.Qnt_Sold
+   WHERE Stock_ID = NEW.Stock_ID;
+
+
+
+# Then create an insert or update statement to force the trigger to happen
+
+INSERT INTO product_order VALUES (
+"O006","3","600","D003","S002","2017.12.05"
+);
+# And lastly write an sql statement that will show me the result of what happens when the trigger fires.
+use furnitureshop;
+select * from furniture_stock;
+select * from stock_audit;
+
+
+# Next we create a table within our Data Mart database for Query 3
+DROP VIEW if exists Stock_purchased_by_supplier;
+CREATE VIEW  Stock_purchased_by_supplier AS
+SELECT Stock_ID, Inventory_lvl, supplier.Supplier_name
+FROM furniture_stock
+left join supplier
+on furniture_stock.Supplier_ID=supplier.Supplier_ID
+Group by Supplier_name;
+
+# Add in here your testing scripts to show me the result of Query 3
+SELECT * from Stock_purchased_by_supplier;
+
+# Next we create a table within our new Data Mart database of each SQL query we have developed Query4
+drop Table if exists DataMart.Query4_Data;
+Create Table DataMart.Query4_Data 
+SELECT COALESCE(furniture_stock.Supplier_ID, 'Total') AS Supplier_Number,
+	    sum(product_order.Qnt_Sold) as TotalQuantitySold, sum(Sales_Price) as Sales
+FROM product_order
+LEFT JOIN furniture_stock
+ON product_order.Stock_ID=furniture_stock.Stock_ID
+GROUP BY Supplier_ID WITH ROLLUP;
+
+# Testing scripts to show me the result of Query 4
+Use Datamart;
+select * from DataMart.Query4_Data;
+
+# Next we create a table within our new Data Mart database of each SQL query we have developed Query 5
+drop Table if exists DataMart.Query5_Data;
+Create Table DataMart.Query5_Data 
+SELECT COALESCE(Date, 'Total') As Dates, Product_Order_ID,
+	    sum(Sales_Price*Qnt_Sold) as Total
+FROM product_order
+WHERE YEAR(Date) = YEAR(CURRENT_DATE()) AND 
+      MONTH(Date) = MONTH(CURRENT_DATE())
+GROUP BY Date with rollup;
+
+# Testing scripts to show me the result of Query 5
+Use Datamart;
+select * from DataMart.Query5_Data;
+
+# Next we create a table within our new Data Mart database of each SQL query we have developed Query 6
+drop Table if exists DataMart.Query6_Data;
+Create Table DataMart.Query6_Data
+SELECT COALESCE(Date, 'Totals') AS Dates, Product_Order_ID, Qnt_Sold, Stock_ID,
+	    sum(Sales_Price*Qnt_Sold) as Total
+FROM product_order
+where YEAR(Date) = YEAR(CURRENT_DATE())
+GROUP BY Date with rollup;
+
+# Testing scripts to show me the result of Query 6
+select * from DataMart.Query6_Data;
+
+# Next we create a table within our new Data Mart database of each SQL query we have developed Query 7
+drop Table if exists DataMart.Query7_Data;
+Create Table DataMart.Query7_Data
+SELECT COALESCE(date, 'Total') AS Dates, count(Order_ID) as Nooftransaction, sum(Sales_price*Qnt_Sold) as Total
+FROM product_order
+WHERE Date  >= DATE_SUB(NOW(),INTERVAL 1 YEAR)
+GROUP BY DATE_FORMAT (date, "%Y-%m"), Date WITH ROLLUP;
+Use Datamart;
+
+# Testing scripts to show me the result of Query 7
+Use Datamart;
+select * from DataMart.Query7_Data;
+
+# Next we create a table within our new Data Mart database of each SQL query we have developed Query 8
+drop Table if exists DataMart.Query8_Data;
+Create Table DataMart.Query8_Data
+SELECT DATE_FORMAT(date, "%m-%Y") AS Month, (Sales_Price*Qnt_Sold/sum(Sales_Price*Qnt_Sold)) *100 as ProcentageGrowth
+from product_order
+GROUP BY DATE_FORMAT(date, "%Y-%m") with rollup;
+
+# Testing scripts to show me the result of Query 8
+Use Datamart;
+select * from DataMart.Query8_Data;
